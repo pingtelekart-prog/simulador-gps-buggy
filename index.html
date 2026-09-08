@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#041627">
+  <meta name="description" content="Simulador GPS - Vehículo Autónomo">
+  <title>Simulador GPS - Vehículo Autónomo</title>
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <!-- Material Symbols -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+    rel="stylesheet">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap"
+    rel="stylesheet">
+
+  <!-- MQTT.js -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+  <!-- Tailwind Configuration (Adaptado de la PWA) -->
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "background": "#fbf9fa",
+            "on-background": "#1b1c1d",
+            "surface": "#fbf9fa",
+            "surface-container-lowest": "#ffffff",
+            "surface-container-highest": "#e4e2e3",
+            "on-surface": "#1b1c1d",
+            "on-surface-variant": "#44474c",
+            "primary": "#041627",
+            "on-primary": "#ffffff",
+            "primary-container": "#1a2b3c",
+            "on-primary-container": "#8192a7",
+            "secondary": "#0058bc",
+            "secondary-container": "#0070eb",
+            "error": "#ba1a1a",
+            "on-error": "#ffffff",
+            "error-container": "#ffdad6",
+            "on-error-container": "#93000a",
+            "success": "#22c55e",
+          },
+          fontFamily: {
+            "body-lg": ["Inter"],
+            "body-sm": ["Inter"],
+            "headline-lg": ["Inter"],
+            "headline-md": ["Inter"],
+            "label-caps": ["JetBrains Mono"],
+            "status-number": ["JetBrains Mono"]
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      -webkit-tap-highlight-color: transparent;
+      overscroll-behavior-y: none;
+    }
+
+    .glass-panel {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.85);
+    }
+
+    .ambient-shadow {
+      box-shadow: 0 4px 12px rgba(4, 22, 39, 0.15);
+    }
+
+    .pulse-dot {
+      animation: pulse-green 2s infinite;
+    }
+
+    @keyframes pulse-green {
+      0% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
+      }
+
+      70% {
+        box-shadow: 0 0 0 6px rgba(34, 197, 94, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+      }
+    }
+
+    .pulse-red {
+      animation: pulse-danger 2s infinite;
+    }
+
+    @keyframes pulse-danger {
+      0% {
+        box-shadow: 0 0 0 0 rgba(186, 26, 26, 0.4);
+      }
+
+      70% {
+        box-shadow: 0 0 0 6px rgba(186, 26, 26, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(186, 26, 26, 0);
+      }
+    }
+
+    .pulse-yellow {
+      animation: pulse-warning 2s infinite;
+    }
+
+    @keyframes pulse-warning {
+      0% {
+        box-shadow: 0 0 0 0 rgba(234, 179, 8, 0.4);
+      }
+
+      70% {
+        box-shadow: 0 0 0 6px rgba(234, 179, 8, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(234, 179, 8, 0);
+      }
+    }
+
+    .btn-pulse {
+      animation: btn-pulse-anim 2s infinite;
+    }
+
+    @keyframes btn-pulse-anim {
+      0% {
+        box-shadow: 0 0 0 0 rgba(0, 88, 188, 0.4);
+      }
+
+      70% {
+        box-shadow: 0 0 0 15px rgba(0, 88, 188, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(0, 88, 188, 0);
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-background text-on-background font-body-lg antialiased min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header
+    class="w-full z-50 flex justify-between items-center px-5 h-16 bg-background/80 backdrop-blur-md border-b border-surface-container-highest shadow-sm">
+    <div class="flex items-center gap-2">
+      <span class="material-symbols-outlined text-primary text-3xl"
+        style="font-variation-settings:'FILL' 1">explore</span>
+      <h1 class="font-headline-md font-bold tracking-tighter text-primary">Simulador GPS</h1>
+    </div>
+
+    <!-- Connection Status -->
+    <div
+      class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-surface-container-lowest border border-surface-container-highest shadow-sm">
+      <div id="mqtt-status-dot" class="w-2.5 h-2.5 rounded-full bg-yellow-500 pulse-yellow flex-shrink-0"></div>
+      <span id="mqtt-status-text"
+        class="font-label-caps text-xs text-on-surface-variant font-semibold">Conectando...</span>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 w-full max-w-md mx-auto px-5 py-8 flex flex-col gap-6 relative z-10">
+
+    <!-- Info Card -->
+    <div class="glass-panel rounded-2xl p-6 ambient-shadow w-full">
+      <h2 class="font-headline-md text-primary mb-4 flex items-center gap-2">
+        <span class="material-symbols-outlined text-secondary">satellite_alt</span>
+        Datos de Telemetría
+      </h2>
+
+      <div class="grid grid-cols-2 gap-4">
+        <!-- Latitude -->
+        <div
+          class="bg-surface-container-lowest p-4 rounded-xl border border-surface-container-highest flex flex-col items-center justify-center text-center">
+          <span class="font-label-caps text-xs text-on-surface-variant mb-1 uppercase tracking-wider">Latitud</span>
+          <span id="lat-val" class="font-status-number text-lg font-bold text-primary">--.------</span>
+        </div>
+
+        <!-- Longitude -->
+        <div
+          class="bg-surface-container-lowest p-4 rounded-xl border border-surface-container-highest flex flex-col items-center justify-center text-center">
+          <span class="font-label-caps text-xs text-on-surface-variant mb-1 uppercase tracking-wider">Longitud</span>
+          <span id="lng-val" class="font-status-number text-lg font-bold text-primary">--.------</span>
+        </div>
+      </div>
+
+      <div class="mt-4 pt-4 border-t border-surface-container-highest">
+        <div class="flex justify-between items-center text-sm">
+          <span class="text-on-surface-variant font-medium">Tópico MQTT:</span>
+          <span
+            class="font-label-caps text-xs bg-surface-container-highest px-2 py-1 rounded text-primary">vehiculo/telemetria</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Message Box (Hidden by default) -->
+    <div id="error-box"
+      class="hidden glass-panel bg-error-container/20 border-error/30 rounded-2xl p-5 ambient-shadow w-full flex-col items-center text-center gap-3">
+      <span class="material-symbols-outlined text-error text-4xl"
+        style="font-variation-settings:'FILL' 1">location_off</span>
+      <h3 class="font-headline-md text-error">Error de Ubicación</h3>
+      <p id="error-text" class="text-sm text-on-surface-variant">No se pudo acceder al GPS del dispositivo.</p>
+    </div>
+
+    <div class="flex-1"></div>
+
+    <!-- Control Button -->
+    <div class="mt-auto pb-6">
+      <button id="btn-toggle-gps"
+        class="w-full h-16 bg-secondary text-on-secondary rounded-2xl font-headline-md text-lg shadow-[0_8px_24px_rgba(0,88,188,0.3)] flex items-center justify-center gap-3 hover:bg-secondary-container active:scale-[0.97] transition-all duration-300">
+        <span class="material-symbols-outlined text-2xl" id="btn-icon">my_location</span>
+        <span id="btn-text">Iniciar Transmisión GPS</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- Background decorative elements -->
+  <div
+    class="fixed top-0 left-0 w-full h-96 bg-gradient-to-b from-secondary/5 to-transparent pointer-events-none -z-10">
+  </div>
+  <div class="fixed -bottom-24 -right-24 w-96 h-96 bg-primary/5 rounded-full blur-3xl pointer-events-none -z-10"></div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // --- UI Elements ---
+      const btnToggle = document.getElementById('btn-toggle-gps');
+      const btnIcon = document.getElementById('btn-icon');
+      const btnText = document.getElementById('btn-text');
+
+      const latVal = document.getElementById('lat-val');
+      const lngVal = document.getElementById('lng-val');
+
+      const statusDot = document.getElementById('mqtt-status-dot');
+      const statusText = document.getElementById('mqtt-status-text');
+
+      const errorBox = document.getElementById('error-box');
+      const errorText = document.getElementById('error-text');
+
+      // --- State ---
+      let isTransmitting = false;
+      let watchId = null;
+      let mqttClient = null;
+      let isMqttConnected = false;
+
+      // --- MQTT Configuration ---
+      // TODO: Rellena estos campos con tus credenciales de HiveMQ u otro broker WSS
+      const MQTT_BROKER_URL = 'f1e4f61d050b44ed8a95c619a4dbf01d.s1.eu.hivemq.cloud';
+      const MQTT_OPTIONS = {
+        username: 'Ping_01', // Opcional, dejar vacío si no requiere
+        password: 'PING2026', // Opcional, dejar vacío si no requiere
+        clientId: 'simulador_gps_' + Math.random().toString(16).substring(2, 10),
+        clean: true,
+        reconnectPeriod: 5000, // Intentar reconectar cada 5 segundos
+      };
+      const MQTT_TOPIC = 'vehiculo/telemetria';
+
+      // --- Funciones de Utilidad ---
+      function updateMqttStatus(status) {
+        statusDot.className = 'w-2.5 h-2.5 rounded-full flex-shrink-0';
+
+        switch (status) {
+          case 'connecting':
+            statusDot.classList.add('bg-yellow-500', 'pulse-yellow');
+            statusText.textContent = 'Conectando...';
+            statusText.classList.replace('text-error', 'text-on-surface-variant');
+            statusText.classList.replace('text-success', 'text-on-surface-variant');
+            isMqttConnected = false;
+            break;
+          case 'connected':
+            statusDot.classList.add('bg-success', 'pulse-dot');
+            statusText.textContent = 'Conectado';
+            statusText.classList.replace('text-on-surface-variant', 'text-success');
+            statusText.classList.replace('text-error', 'text-success');
+            isMqttConnected = true;
+            break;
+          case 'disconnected':
+          case 'error':
+            statusDot.classList.add('bg-error', 'pulse-red');
+            statusText.textContent = status === 'error' ? 'Error Broker' : 'Desconectado';
+            statusText.classList.replace('text-on-surface-variant', 'text-error');
+            statusText.classList.replace('text-success', 'text-error');
+            isMqttConnected = false;
+            break;
+        }
+      }
+
+      function showError(message) {
+        errorText.textContent = message;
+        errorBox.classList.remove('hidden');
+        errorBox.classList.add('flex');
+        stopTransmission(); // Detener si hay error
+      }
+
+      function hideError() {
+        errorBox.classList.add('hidden');
+        errorBox.classList.remove('flex');
+      }
+
+      // --- Inicializar MQTT ---
+      function initMqtt() {
+        if (!MQTT_BROKER_URL || MQTT_BROKER_URL.includes('YOUR_CLUSTER_URL')) {
+          updateMqttStatus('disconnected');
+          statusText.textContent = 'Falta config.';
+          return;
+        }
+
+        updateMqttStatus('connecting');
+
+        try {
+          mqttClient = mqtt.connect(MQTT_BROKER_URL, MQTT_OPTIONS);
+
+          mqttClient.on('connect', () => {
+            console.log('Conectado al broker MQTT');
+            updateMqttStatus('connected');
+          });
+
+          mqttClient.on('error', (err) => {
+            console.error('Error MQTT:', err);
+            updateMqttStatus('error');
+          });
+
+          mqttClient.on('close', () => {
+            console.log('Desconectado del broker MQTT');
+            updateMqttStatus('disconnected');
+          });
+
+          mqttClient.on('offline', () => {
+            updateMqttStatus('disconnected');
+          });
+        } catch (e) {
+          console.error("Fallo al iniciar cliente MQTT", e);
+          updateMqttStatus('error');
+        }
+      }
+
+      // --- Lógica del GPS ---
+      function successLocation(position) {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+
+        // Actualizar UI
+        latVal.textContent = lat.toFixed(6);
+        lngVal.textContent = lng.toFixed(6);
+
+        // Publicar por MQTT
+        if (isMqttConnected && mqttClient) {
+          const payload = JSON.stringify({
+            latitud: lat,
+            longitud: lng
+          });
+
+          mqttClient.publish(MQTT_TOPIC, payload, { qos: 0 }, (err) => {
+            if (err) {
+              console.error('Error al publicar:', err);
+            } else {
+              console.log('Publicado:', payload);
+              // Pequeño efecto visual de que se envió data
+              latVal.classList.add('text-secondary');
+              lngVal.classList.add('text-secondary');
+              setTimeout(() => {
+                latVal.classList.remove('text-secondary');
+                lngVal.classList.remove('text-secondary');
+              }, 200);
+            }
+          });
+        }
+      }
+
+      function errorLocation(err) {
+        console.warn(`ERROR(${err.code}): ${err.message}`);
+        let msg = "No se pudo obtener la ubicación.";
+        switch (err.code) {
+          case err.PERMISSION_DENIED:
+            msg = "Permiso de ubicación denegado por el usuario.";
+            break;
+          case err.POSITION_UNAVAILABLE:
+            msg = "La información de ubicación no está disponible (GPS desactivado).";
+            break;
+          case err.TIMEOUT:
+            msg = "La solicitud para obtener la ubicación ha caducado.";
+            break;
+        }
+        showError(msg);
+      }
+
+      function startTransmission() {
+        if (!navigator.geolocation) {
+          showError("Tu navegador no soporta geolocalización.");
+          return;
+        }
+
+        hideError();
+        isTransmitting = true;
+
+        // UI Changes
+        btnToggle.classList.replace('bg-secondary', 'bg-error');
+        btnToggle.classList.replace('text-on-secondary', 'text-on-error');
+        btnToggle.classList.replace('hover:bg-secondary-container', 'hover:bg-error/80');
+        btnToggle.classList.replace('shadow-[0_8px_24px_rgba(0,88,188,0.3)]', 'shadow-[0_8px_24px_rgba(186,26,26,0.3)]');
+        btnToggle.classList.add('btn-pulse');
+
+        btnIcon.textContent = 'stop_circle';
+        btnText.textContent = 'Detener Transmisión';
+
+        // Opciones de alta precisión
+        const options = {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0
+        };
+
+        watchId = navigator.geolocation.watchPosition(successLocation, errorLocation, options);
+      }
+
+      function stopTransmission() {
+        isTransmitting = false;
+
+        if (watchId !== null) {
+          navigator.geolocation.clearWatch(watchId);
+          watchId = null;
+        }
+
+        // Reset UI
+        btnToggle.classList.replace('bg-error', 'bg-secondary');
+        btnToggle.classList.replace('text-on-error', 'text-on-secondary');
+        btnToggle.classList.replace('hover:bg-error/80', 'hover:bg-secondary-container');
+        btnToggle.classList.replace('shadow-[0_8px_24px_rgba(186,26,26,0.3)]', 'shadow-[0_8px_24px_rgba(0,88,188,0.3)]');
+        btnToggle.classList.remove('btn-pulse');
+
+        btnIcon.textContent = 'my_location';
+        btnText.textContent = 'Iniciar Transmisión GPS';
+
+        latVal.textContent = '--.------';
+        lngVal.textContent = '--.------';
+      }
+
+      // --- Event Listeners ---
+      btnToggle.addEventListener('click', () => {
+        if (isTransmitting) {
+          stopTransmission();
+        } else {
+          startTransmission();
+        }
+      });
+
+      // --- Arranque ---
+      initMqtt();
+    });
+  </script>
+</body>
+
+</html>
