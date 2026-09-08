@@ -204,7 +204,7 @@
         <div class="flex justify-between items-center text-sm">
           <span class="text-on-surface-variant font-medium">Tópico MQTT:</span>
           <span
-            class="font-label-caps text-xs bg-surface-container-highest px-2 py-1 rounded text-primary">vehiculo/telemetria</span>
+            class="font-label-caps text-xs bg-surface-container-highest px-2 py-1 rounded text-primary">vehiculo/localizacion</span>
         </div>
       </div>
     </div>
@@ -268,7 +268,7 @@
         clean: true,
         reconnectPeriod: 5000, // Intentar reconectar cada 5 segundos
       };
-      const MQTT_TOPIC = 'vehiculo/telemetria';
+      const MQTT_TOPIC = 'vehiculo/localizacion';
 
       // --- Funciones de Utilidad ---
       function updateMqttStatus(status) {
@@ -362,7 +362,8 @@
         if (isMqttConnected && mqttClient) {
           const payload = JSON.stringify({
             latitud: lat,
-            longitud: lng
+            longitud: lng,
+            timestamp: Date.now()
           });
 
           mqttClient.publish(MQTT_TOPIC, payload, { qos: 0 }, (err) => {
