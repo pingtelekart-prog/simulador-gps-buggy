@@ -225,6 +225,15 @@
       <p id="error-text" class="text-sm text-on-surface-variant">No se pudo acceder al GPS del dispositivo.</p>
     </div>
 
+    <!-- Warning Message Box (Hidden by default) -->
+    <div id="warning-box"
+      class="hidden glass-panel bg-yellow-500/20 border-yellow-500/30 rounded-2xl p-5 ambient-shadow w-full flex-col items-center text-center gap-3">
+      <span class="material-symbols-outlined text-yellow-600 text-4xl"
+        style="font-variation-settings:'FILL' 1">satellite_alt</span>
+      <h3 class="font-headline-md text-yellow-600">Calibrando Señal</h3>
+      <p id="warning-text" class="text-sm text-on-surface-variant">Calibrando GPS...</p>
+    </div>
+
     <div class="flex-1"></div>
 
     <!-- Control Button -->
@@ -259,6 +268,8 @@
 
       const errorBox = document.getElementById('error-box');
       const errorText = document.getElementById('error-text');
+      const warningBox = document.getElementById('warning-box');
+      const warningText = document.getElementById('warning-text');
 
       // --- State ---
       let isTransmitting = false;
@@ -319,6 +330,17 @@
       function hideError() {
         errorBox.classList.add('hidden');
         errorBox.classList.remove('flex');
+      }
+
+      function showWarning(message) {
+        warningText.textContent = message;
+        warningBox.classList.remove('hidden');
+        warningBox.classList.add('flex');
+      }
+
+      function hideWarning() {
+        warningBox.classList.add('hidden');
+        warningBox.classList.remove('flex');
       }
 
       // Fórmula de Haversine para calcular distancia en metros
@@ -385,6 +407,15 @@
         lngVal.textContent = lng.toFixed(6);
         if (accVal) accVal.textContent = accuracy.toFixed(1) + ' m';
 
+        // Filtro de precisión
+        if (accuracy > 15) {
+          console.warn(`Precisión baja (${accuracy.toFixed(1)}m). Esperando < 15m.`);
+          showWarning(`Calibrando GPS (Precisión actual: ${accuracy.toFixed(1)}m. Esperando < 15m)...`);
+          return;
+        }
+
+        hideWarning();
+
         // Filtro de ruido
         if (ultimaUbicacionEnviada) {
           const distancia = calcularDistancia(
@@ -430,6 +461,12 @@
 
       function errorLocation(err) {
         console.warn(`ERROR(${err.code}): ${err.message}`);
+        
+        if (err.code === err.TIMEOUT) {
+          showWarning("Buscando satélites...");
+          return; // No detenemos la transmisión
+        }
+
         let msg = "No se pudo obtener la ubicación.";
         switch (err.code) {
           case err.PERMISSION_DENIED:
@@ -437,9 +474,6 @@
             break;
           case err.POSITION_UNAVAILABLE:
             msg = "La información de ubicación no está disponible (GPS desactivado).";
-            break;
-          case err.TIMEOUT:
-            msg = "La solicitud para obtener la ubicación ha caducado.";
             break;
         }
         showError(msg);
@@ -452,6 +486,7 @@
         }
 
         hideError();
+        hideWarning();
         isTransmitting = true;
 
         // UI Changes
@@ -481,6 +516,9 @@
           navigator.geolocation.clearWatch(watchId);
           watchId = null;
         }
+
+        hideWarning();
+        hideError();
 
         // Reset UI
         btnToggle.classList.replace('bg-error', 'bg-secondary');
