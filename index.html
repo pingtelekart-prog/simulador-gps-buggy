@@ -398,21 +398,20 @@
 
       // --- Lógica del GPS ---
       function successLocation(position) {
+        const accuracy = position.coords.accuracy;
+
+        if (accuracy > 15) {
+          showWarning(`Calibrando GPS (Precisión actual: ${accuracy.toFixed(1)}m. Esperando <= 15m)`);
+          return;
+        }
+
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        const accuracy = position.coords.accuracy;
 
         // Actualizar UI
         latVal.textContent = lat.toFixed(6);
         lngVal.textContent = lng.toFixed(6);
         if (accVal) accVal.textContent = accuracy.toFixed(1) + ' m';
-
-        // Filtro de precisión
-        if (accuracy > 15) {
-          console.warn(`Precisión baja (${accuracy.toFixed(1)}m). Esperando < 15m.`);
-          showWarning(`Calibrando GPS (Precisión actual: ${accuracy.toFixed(1)}m. Esperando < 15m)...`);
-          return;
-        }
 
         hideWarning();
 
