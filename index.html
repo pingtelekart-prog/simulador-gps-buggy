@@ -375,6 +375,55 @@
           mqttClient.on('connect', () => {
             console.log('Conectado al broker MQTT');
             updateMqttStatus('connected');
+            
+            mqttClient.subscribe('vehiculo/comandos', (err) => {
+              if (err) console.error('Error suscribiendo a vehiculo/comandos:', err);
+              else console.log('Suscrito a vehiculo/comandos');
+            });
+          });
+
+          mqttClient.on('message', async (topic, message) => {
+            if (topic === 'vehiculo/comandos') {
+              try {
+                const payload = JSON.parse(message.toString());
+                const lat_destino = payload.latitud || (payload.destino && payload.destino.latitud);
+                const lon_destino = payload.longitud || (payload.destino && payload.destino.longitud);
+
+                if (lat_destino !== undefined && lon_destino !== undefined) {
+                  if (!ultimaUbicacionEnviada) {
+                    console.warn('No hay ubicación actual para calcular ruta.');
+                    return;
+                  }
+
+                  const lat_origen = ultimaUbicacionEnviada.lat;
+                  const lon_origen = ultimaUbicacionEnviada.lng;
+
+                  const url = `https://router.project-osrm.org/route/v1/driving/${lon_origen},${lat_origen};${lon_destino},${lat_destino}?geometries=geojson`;
+                  console.log('Solicitando ruta a OSRM:', url);
+
+                  const response = await fetch(url);
+                  const data = await response.json();
+
+                  if (data && data.routes && data.routes.length > 0) {
+                    const coordinates = data.routes[0].geometry.coordinates;
+                    
+                    const rutaPayload = JSON.stringify({
+                      coordenadas: coordinates,
+                      timestamp: Date.now()
+                    });
+
+                    mqttClient.publish('vehiculo/ruta_calculada', rutaPayload, { qos: 0 }, (err) => {
+                      if (err) console.error('Error publicando ruta:', err);
+                      else console.log('Ruta publicada en vehiculo/ruta_calculada');
+                    });
+                  } else {
+                    console.warn('OSRM no encontró una ruta válida.');
+                  }
+                }
+              } catch (e) {
+                console.error('Error procesando mensaje MQTT:', e);
+              }
+            }
           });
 
           mqttClient.on('error', (err) => {
